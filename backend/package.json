@@ -2,7 +2,6 @@
   "name": "matriclab-backend",
   "version": "1.0.0",
   "description": "MatricLab API: auth, AI tutor, quiz logging, PayFast subscriptions, admin analytics.",
-
   "main": "server.js",
   "type": "module",
   "scripts": {
@@ -10,6 +9,7 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
+    "@google/genai": "^0.1.1",
     "better-sqlite3": "^11.3.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
