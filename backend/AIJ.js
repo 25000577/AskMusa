@@ -1,14 +1,20 @@
-const response = await fetch(
-    "http://localhost:11434/api/generate",
-    {
-        method: "POST",
-        headers: {
-            "Content-Type":"application/json"
-        },
-        body: JSON.stringify({
-            message: message
-        })
-    }
-);
+import { GoogleGenAI } from '@google/genai';
 
-const data = await response.json();
+// Automatically picks up GEMINI_API_KEY from your environment variables
+const ai = new GoogleGenAI();
+
+async function getAITutorResponse(userPrompt) {
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: userPrompt,
+      config: {
+        systemInstruction: "You are an AI Tutor powered by Google. Explain things step by step clearly.",
+      }
+    });
+    return response.text;
+  } catch (error) {
+    console.error("Gemini Error:", error);
+    return "Sorry, I encountered an error talking to the AI tutor.";
+  }
+}
