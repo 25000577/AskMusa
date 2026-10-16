@@ -18,8 +18,8 @@ const APP_URL      = process.env.APP_URL      || `http://localhost:3001`;
 const JWT_SECRET   = process.env.JWT_SECRET   || 'xcelerate-dev-secret-change-in-prod';
 const TOKEN_TTL    = 60 * 60 * 24 * 30; // 30 days
 
-// Initialize Gemini SDK (picks up process.env.GEMINI_API_KEY automatically)
-const ai = new GoogleGenAI();
+// Initialize Gemini SDK with explicit API key handling
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 /* ------------------------------------------------------------------ */
 /*  Database  (create data/ dir FIRST so SQLite doesn't throw)        */
@@ -261,9 +261,18 @@ app.post('/api/tutor', async (req, res) => {
   if (!message || typeof message !== 'string')
     return sendJSON(res, 400, { error: 'message is required.' });
 
-  db.prepare('INSERT INTO tutor_messages (user_id,subject,created_at) VALUES (?,?,?)')
-    .run(user.id, subject || null, new Date().toISOString());
-  logActivity(user.id, 'tutor_message', { subject });
+  if (!process.env.GEMINI_API_KEY) {
+    console.error('Gemini Error: GEMINI_API_KEY environment variable is not set.');
+    return sendJSON(res, 200, { reply: 'Server configuration error: GEMINI_API_KEY is missing.', fallback: true });
+  }
+
+  try {
+    db.prepare('INSERT INTO tutor_messages (user_id,subject,created_at) VALUES (?,?,?)')
+      .run(user.id, subject || null, new Date().toISOString());
+    logActivity(user.id, 'tutor_message', { subject });
+  } catch (dbErr) {
+    console.error('Database log error:', dbErr.message);
+  }
 
   const subjectCtx  = SUBJECT_SYSTEM[subject] || 'general CAPS STEM revision for Grade 12.';
   const systemPrompt =
@@ -271,16 +280,18 @@ app.post('/api/tutor', async (req, res) => {
     `Subject: ${subjectCtx}\n` +
     `Rules: explain reasoning before the answer; use simple language; show working step-by-step; keep replies under 200 words unless asked for more.`;
 
-  const chatHistory = history.slice(-6).map(h => ({
-    role: h.role === 'user' ? 'user' : 'model',
-    parts: [{ text: h.content }]
-  }));
+  const formattedHistory = Array.isArray(history)
+    ? history.slice(-6).map(h => ({
+        role: h.role === 'user' ? 'user' : 'model',
+        parts: [{ text: typeof h.content === 'string' ? h.content : (h.text || '') }]
+      }))
+    : [];
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: [
-        ...chatHistory,
+        ...formattedHistory,
         { role: 'user', parts: [{ text: message }] }
       ],
       config: {
@@ -289,10 +300,10 @@ app.post('/api/tutor', async (req, res) => {
     });
 
     const reply = (response.text || '').trim();
-    return sendJSON(res, 200, { reply: reply || null, fallback: !reply });
+    return sendJSON(res, 200, { reply: reply || 'Sorry, I could not generate a response.', fallback: false });
   } catch (err) {
-    console.error('Gemini error:', err.message);
-    return sendJSON(res, 200, { reply: null, fallback: true });
+    console.error('Gemini Execution Error:', err);
+    return sendJSON(res, 200, { reply: `AI Error: ${err.message}`, fallback: true });
   }
 });
 
