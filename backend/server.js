@@ -169,11 +169,12 @@ function logActivity(userId, eventType, meta) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Seed admin account                                                */
+/*  Seed admin account & Forced Admin Rule                            */
 /* ------------------------------------------------------------------ */
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
-const ADMIN_PASS  = process.env.ADMIN_PASSWORD;
-if (ADMIN_EMAIL && ADMIN_PASS) {
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'vutlharikhumalo@gmail.com';
+const ADMIN_PASS  = process.env.ADMIN_PASSWORD || 'Xcelerate2026!';
+
+if (ADMIN_EMAIL) {
   const exists = db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN_EMAIL);
   if (!exists) {
     const { hash, salt } = hashPassword(ADMIN_PASS);
@@ -184,7 +185,6 @@ if (ADMIN_EMAIL && ADMIN_PASS) {
     ).run('Admin', ADMIN_EMAIL, hash, salt, now, now);
     console.log('✓ Admin account created:', ADMIN_EMAIL);
   } else {
-    // Ensure existing user configured via env is promoted to admin if credentials match or config updates
     db.prepare('UPDATE users SET is_admin = 1 WHERE email = ?').run(ADMIN_EMAIL);
   }
 }
@@ -220,12 +220,14 @@ app.post('/api/auth/signup', (req, res) => {
   const vExpires = new Date(Date.now() + 86400000).toISOString();
   const now      = new Date().toISOString();
 
+  const isAdminFlag = (normalizedEmail === 'vutlharikhumalo@gmail.com') ? 1 : 0;
+
   const result = db.prepare(
     `INSERT INTO users
-     (name,email,password_hash,password_salt,grade,verify_token,verify_expires,created_at,last_active_at)
-     VALUES (?,?,?,?,?,?,?,?,?)`
+     (name,email,password_hash,password_salt,grade,is_admin,verify_token,verify_expires,created_at,last_active_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`
   ).run(String(name).trim(), normalizedEmail, hash, salt,
-        grade || 'Grade 12', vToken, vExpires, now, now);
+        grade || 'Grade 12', isAdminFlag, vToken, vExpires, now, now);
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid);
   logActivity(user.id, 'signup', {});
@@ -240,6 +242,12 @@ app.post('/api/auth/login', (req, res) => {
     return sendJSON(res, 400, { error: 'email and password are required.' });
 
   const normalizedEmail = String(email).trim().toLowerCase();
+  
+  // Force admin flag on login if it's your designated admin email
+  if (normalizedEmail === 'vutlharikhumalo@gmail.com') {
+    db.prepare('UPDATE users SET is_admin = 1 WHERE email = ?').run(normalizedEmail);
+  }
+
   const user = db.prepare('SELECT * FROM users WHERE email = ?').get(normalizedEmail);
   if (!user || !verifyPassword(password, user.password_salt, user.password_hash))
     return sendJSON(res, 401, { error: 'Incorrect email or password.' });
