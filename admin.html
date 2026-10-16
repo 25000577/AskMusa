@@ -45,15 +45,16 @@ h1, h2 { font-family: 'Space Grotesk', sans-serif; margin: 0; }
 }
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
 .field label { font-size: 0.8rem; color: var(--chalk-dim); }
-.field input {
+.field input, .field select, .field textarea {
   background: #141d33;
   border: 1px solid var(--surface-line);
   border-radius: 6px;
   padding: 12px;
   color: var(--chalk);
   font-size: 0.95rem;
+  font-family: inherit;
 }
-.field input:focus { outline: none; border-color: var(--amber); }
+.field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--amber); }
 .btn {
   width: 100%;
   padding: 12px;
@@ -80,6 +81,11 @@ table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 th, td { padding: 10px; text-align: left; border-bottom: 1px solid var(--surface-line); }
 th { color: var(--chalk-dim); font-size: 0.75rem; text-transform: uppercase; }
 .logout-btn { background: none; border: 1px solid var(--coral); color: var(--coral); padding: 6px 12px; border-radius: 6px; cursor: pointer; float: right; }
+.nav-bar { display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 1px solid var(--surface-line); padding-bottom: 10px; }
+.nav-tab { background: #141d33; border: 1px solid var(--surface-line); color: var(--chalk-dim); padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
+.nav-tab.active { background: var(--amber); color: var(--ink); border-color: var(--amber); }
+.page { display: none; }
+.page.active { display: block; }
 </style>
 </head>
 <body>
@@ -88,7 +94,7 @@ th { color: var(--chalk-dim); font-size: 0.75rem; text-transform: uppercase; }
 <div class="login-wrap" id="loginWrap">
   <div class="login-card">
     <h1>Owner Control</h1>
-    <p style="color:var(--chalk-dim);font-size:0.85rem;margin-bottom:20px;">Sign in to view learner logs and activity.</p>
+    <p style="color:var(--chalk-dim);font-size:0.85rem;margin-bottom:20px;">Sign in to view learner logs and upload quizzes.</p>
     <div class="error-box" id="loginError"></div>
     <div class="field">
       <label>Email</label>
@@ -106,28 +112,88 @@ th { color: var(--chalk-dim); font-size: 0.75rem; text-transform: uppercase; }
 <div class="app" id="appWrap">
   <button class="logout-btn" onclick="doLogout()">Log Out</button>
   <h1>Owner Dashboard</h1>
-  <p style="color:var(--chalk-dim);margin-bottom:20px;">Live platform tracking & activity monitor.</p>
+  <p style="color:var(--chalk-dim);margin-bottom:20px;">Live platform tracking & question management.</p>
 
-  <div class="panel">
-    <h2>Activity Feed</h2>
-    <div id="feedList" style="margin-top:10px;font-size:0.85rem;color:var(--chalk-dim);">Loading feed...</div>
+  <div class="nav-bar">
+    <button class="nav-tab active" onclick="switchTab('feed', this)">Activity & Issues</button>
+    <button class="nav-tab" onclick="switchTab('users', this)">Learners</button>
+    <button class="nav-tab" onclick="switchTab('quizzes', this)">Upload Quiz</button>
   </div>
 
-  <div class="panel">
-    <h2>Registered Learners</h2>
-    <table>
-      <thead>
-        <tr><th>Name</th><th>Email</th><th>Tier</th><th>Verified</th><th>Joined</th></tr>
-      </thead>
-      <tbody id="userTableBody">
-        <tr><td colspan="5">Loading learners...</td></tr>
-      </tbody>
-    </table>
+  <!-- Tab 1: Activity & Issues -->
+  <div class="page active" id="tab-feed">
+    <div class="panel">
+      <h2>Live Activity Feed</h2>
+      <div id="feedList" style="margin-top:10px;font-size:0.85rem;color:var(--chalk-dim);">Loading feed...</div>
+    </div>
+  </div>
+
+  <!-- Tab 2: Learners -->
+  <div class="page" id="tab-users">
+    <div class="panel">
+      <h2>Registered Learners</h2>
+      <table>
+        <thead>
+          <tr><th>Name</th><th>Email</th><th>Tier</th><th>Verified</th><th>Joined</th></tr>
+        </thead>
+        <tbody id="userTableBody">
+          <tr><td colspan="5">Loading learners...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab 3: Upload Quiz -->
+  <div class="page" id="tab-quizzes">
+    <div class="panel" style="max-width: 600px;">
+      <h2>Publish New Quiz Question</h2>
+      <p style="color:var(--chalk-dim);font-size:0.82rem;margin-bottom:15px;">Add custom exam questions directly to the platform database.</p>
+      
+      <div class="error-box" id="quizError"></div>
+      <div id="quizSuccess" style="background:rgba(74,222,128,0.15); border:1px solid var(--green); color:var(--green); padding:10px; border-radius:6px; margin-bottom:14px; display:none;"></div>
+
+      <div class="field">
+        <label>Subject</label>
+        <select id="qSubject">
+          <option value="mathematics">Mathematics</option>
+          <option value="physical-sciences">Physical Sciences</option>
+          <option value="life-sciences">Life Sciences</option>
+          <option value="information-technology">Information Technology</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Paper / Category</label>
+        <input type="text" id="qPaper" placeholder="e.g., Paper 1 - Calculus">
+      </div>
+
+      <div class="field">
+        <label>Question Text</label>
+        <textarea id="qText" rows="3" placeholder="Enter problem statement..."></textarea>
+      </div>
+
+      <div class="field">
+        <label>Options (Comma-separated)</label>
+        <input type="text" id="qOptions" placeholder="Option A, Option B, Option C, Option D">
+      </div>
+
+      <div class="field">
+        <label>Correct Answer</label>
+        <input type="text" id="qAnswer" placeholder="Must match the correct option exactly">
+      </div>
+
+      <div class="field">
+        <label>Explanation / Working Out (Optional)</label>
+        <textarea id="qExplanation" rows="2" placeholder="Step-by-step reasoning..."></textarea>
+      </div>
+
+      <button class="btn" onclick="uploadQuizQuestion()">Publish Question</button>
+    </div>
   </div>
 </div>
 
 <script>
-const API = ''; // relative url to backend
+const API = ''; 
 let token = localStorage.getItem('xm_admin_token');
 
 async function doLogin() {
@@ -171,6 +237,13 @@ function showDashboard() {
   loadAdminData();
 }
 
+function switchTab(tabId, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`tab-${tabId}`).classList.add('active');
+  btn.classList.add('active');
+}
+
 async function loadAdminData() {
   try {
     // Load Feed
@@ -178,7 +251,7 @@ async function loadAdminData() {
     const feedData = await feedRes.json();
     const feedEl = document.getElementById('feedList');
     if (feedData.feed && feedData.feed.length > 0) {
-      feedEl.innerHTML = feedData.feed.map(e => `<div><b>${e.name}</b> (${e.email}) — ${e.event_type} at ${new Date(e.created_at).toLocaleTimeString()}</div>`).join('');
+      feedEl.innerHTML = feedData.feed.map(e => `<div style="padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.05);"><b>${e.name}</b> (${e.email}) — <span style="color:var(--amber);">${e.event_type}</span> at ${new Date(e.created_at).toLocaleTimeString()}</div>`).join('');
     } else {
       feedEl.innerHTML = 'No activity recorded yet.';
     }
@@ -202,6 +275,55 @@ async function loadAdminData() {
     }
   } catch (err) {
     console.error('Failed to load admin data', err);
+  }
+}
+
+async function uploadQuizQuestion() {
+  const subject = document.getElementById('qSubject').value;
+  const paper = document.getElementById('qPaper').value.trim();
+  const question = document.getElementById('qText').value.trim();
+  const optionsRaw = document.getElementById('qOptions').value.trim();
+  const answer = document.getElementById('qAnswer').value.trim();
+  const explanation = document.getElementById('qExplanation').value.trim();
+
+  const errEl = document.getElementById('quizError');
+  const succEl = document.getElementById('quizSuccess');
+  errEl.style.display = 'none';
+  succEl.style.display = 'none';
+
+  if (!paper || !question || !optionsRaw || !answer) {
+    errEl.textContent = 'Please fill out all required fields.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const options = optionsRaw.split(',').map(o => o.trim());
+
+  try {
+    const res = await fetch(`${API}/api/admin/quizzes`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}` 
+      },
+      body: JSON.stringify({ subject, paper, question, options, answer, explanation })
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      errEl.textContent = data.error || 'Failed to upload question.';
+      errEl.style.display = 'block';
+    } else {
+      succEl.textContent = 'Question successfully published to the platform!';
+      succEl.style.display = 'block';
+      document.getElementById('qText').value = '';
+      document.getElementById('qOptions').value = '';
+      document.getElementById('qAnswer').value = '';
+      document.getElementById('qExplanation').value = '';
+    }
+  } catch (err) {
+    errEl.textContent = 'Server connection error.';
+    errEl.style.display = 'block';
   }
 }
 
