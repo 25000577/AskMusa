@@ -305,9 +305,14 @@ app.post('/api/tutor', async (req, res) => {
 
   const subjectCtx  = SUBJECT_SYSTEM[subject] || 'general CAPS STEM revision for Grade 12.';
   const systemPrompt =
-    `You are a patient, step-by-step South African Grade 12 NSC tutor.\n` +
+    `You are a friendly, patient South African Grade 12 NSC tutor.\n` +
     `Subject: ${subjectCtx}\n` +
-    `Rules: explain reasoning before the answer; use simple language; show working step-by-step; keep replies under 200 words unless asked for more.`;
+    `CRITICAL FORMATTING RULES:\n` +
+    `- Write in short, clear paragraphs with plenty of line breaks.\n` +
+    `- Use bullet points or numbered lists for steps.\n` +
+    `- Never output a dense wall of text.\n` +
+    `- Keep explanations simple, encouraging, and easy to read.\n` +
+    `- Keep replies under 200 words unless asked for more.`;
 
   const formattedHistory = Array.isArray(history)
     ? history.slice(-6).map(h => ({
@@ -501,7 +506,7 @@ app.get('*', (req, res) => {
 /* ------------------------------------------------------------------ */
 app.listen(PORT, () => {
   console.log(`\n Xcelerate MathsAcademy (Free Edition)`);
-  console.log(`    Open → http://localhost:${PORT}`);
+  console.log(`    Open → http://localhost:3001`);
   console.log(`    AI Engine → Google Gemini (gemini-2.5-flash)`);
   console.log(`    Status → 100% Free & Unlimited`);
   console.log('');
