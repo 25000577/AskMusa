@@ -704,12 +704,11 @@
 
     <div class="about-story">
       <div class="about-story-card">
-        <h3>🤖 Why Ollama?</h3>
+        <h3>🤖 Why Google Gemini?</h3>
         <p>
-          Ollama runs the AI model on your own machine — no cloud required. That means your
-          conversations stay private, there's no per-token cost passed on to you, and the tutor
-          works even with a spotty connection. We use <strong>llama3</strong> which is strong
-          enough for CAPS-level STEM explanations without needing a GPU.
+          Xcelerate MathsAcademy's AI Tutor uses <strong>Google Gemini</strong> to provide
+          step-by-step explanations across the supported subjects. Your authenticated request
+          is sent to the Xcelerate backend, which securely handles communication with Gemini.
         </p>
       </div>
       <div class="about-story-card">
@@ -1030,12 +1029,6 @@ const Tutor = (() => {
 
   let activeSubject = 'mathematics';
   let chatHistory = [];
-  let msgCount = 0;
-
-  function offlineTip(subject) {
-    const pool = OFFLINE_TIPS[subject] || OFFLINE_TIPS.mathematics;
-    return pool[Math.floor(Math.random() * pool.length)];
-  }
 
   function appendMsg(role, text) {
     const win = document.getElementById('chatWindow');
@@ -1062,6 +1055,7 @@ const Tutor = (() => {
     row.innerHTML = (typeof SUBJECTS !== 'undefined' ? SUBJECTS : []).map(s => `
       <button class="chip" aria-pressed="${s.id === activeSubject}" data-subject="${s.id}">${s.name}</button>
     `).join('');
+
     row.querySelectorAll('.chip').forEach(c => {
       c.addEventListener('click', () => {
         activeSubject = c.dataset.subject;
@@ -1075,6 +1069,7 @@ const Tutor = (() => {
     const list = document.getElementById('tutorPrompts');
     const ps = SUBJECT_PROMPTS[activeSubject] || [];
     list.innerHTML = ps.map(p => `<button class="prompt-chip">${p}</button>`).join('');
+
     list.querySelectorAll('.prompt-chip').forEach(btn => {
       btn.addEventListener('click', () => {
         document.getElementById('chatInput').value = btn.textContent;
@@ -1086,8 +1081,9 @@ const Tutor = (() => {
   async function send(message) {
     if (!message.trim()) return;
 
-    const input  = document.getElementById('chatInput');
+    const input = document.getElementById('chatInput');
     const sendBtn = document.querySelector('#chatForm button[type="submit"]');
+
     input.value = '';
     input.disabled = true;
     sendBtn.disabled = true;
@@ -1098,16 +1094,18 @@ const Tutor = (() => {
     const typing = appendTyping();
 
     try {
+      const token = Auth.token();
+
       const res = await fetch(TUTOR_ENDPOINT, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${Auth.token()}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           subject: activeSubject,
           message,
-          history: chatHistory.slice(-8)
+          history: chatHistory.slice(-8),
         }),
       });
 
@@ -1129,7 +1127,10 @@ const Tutor = (() => {
 
     } catch (error) {
       typing.remove();
-      appendMsg('assistant', `Sorry, I couldn't get a response from the tutor. ${error.message}`);
+      appendMsg(
+        'assistant',
+        `Sorry, I couldn't get a response from the Gemini tutor. ${error.message}`
+      );
     } finally {
       input.disabled = false;
       sendBtn.disabled = false;
@@ -1147,7 +1148,10 @@ const Tutor = (() => {
       if (msg) send(msg);
     });
 
-    appendMsg('assistant', "Hi! I'm your AI Tutor. Chats are free and unlimited, so choose a subject on the left and ask me anything. I'll explain it step by step. 🎓");
+    appendMsg(
+      'assistant',
+      "Hi! I'm your AI Tutor powered by Google Gemini. Chats are free and unlimited, so choose a subject on the left and ask me anything. I'll explain it step by step. 🎓"
+    );
   }
 
   return { init };
