@@ -316,4 +316,256 @@ app.get('/api/auth/verify', (req, res) => {
     return res.status(400).send('Verification link has expired — request a new one.');
   db.prepare('UPDATE users SET email_verified = 1, verify_token = NULL, verify_expires = NULL WHERE id = ?')
     .run(user.id);
-  logActivity(
+  logActivity(user.id, 'email_verified', {});
+  res.redirect(`${APP_URL}/?verified=1`);
+});
+
+/* ---- AI Tutor (Gemini integration) ---- */
+const SUBJECT_SYSTEM = {
+  'mathematics':            'CAPS Grade 12 Mathematics: algebra, functions, calculus, trigonometry, geometry and statistics.',
+  'physical-sciences':      'CAPS Grade 12 Physical Sciences: mechanics, electricity, waves and chemical systems.',
+  'life-sciences':          'CAPS Grade 12 Life Sciences: genetics, evolution, human physiology and ecology.',
+  'information-technology': 'CAPS Grade 12 Information Technology: programming, databases, networks and systems.',
+};
+
+app.post('/api/tutor', async (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
+
+  const { subject, message, history = [] } = req.body;
+  if (!message || typeof message !== 'string')
+    return sendJSON(res, 400, { error: 'message is required.' });
+
+  if (!tierAtLeast(user.tier, 'plus')) {
+    const since = new Date(); since.setUTCHours(0, 0, 0, 0);
+    const { c } = db.prepare(
+      'SELECT COUNT(*) c FROM tutor_messages WHERE user_id = ? AND created_at >= ?'
+    ).get(user.id, since.toISOString());
+    if (c >= FREE_TUTOR_DAILY_LIMIT)
+      return sendJSON(res, 403, {
+        error: 'upgrade_required',
+        message: `You've used today's ${FREE_TUTOR_DAILY_LIMIT} free messages. Upgrade to Plus for unlimited chats.`,
+      });
+  }
+
+  db.prepare('INSERT INTO tutor_messages (user_id,subject,created_at) VALUES (?,?,?)')
+    .run(user.id, subject || null, new Date().toISOString());
+  logActivity(user.id, 'tutor_message', { subject });
+
+  const subjectCtx  = SUBJECT_SYSTEM[subject] || 'general CAPS STEM revision for Grade 12.';
+  const systemPrompt =
+    `You are a patient, step-by-step South African Grade 12 NSC tutor.\n` +
+    `Subject: ${subjectCtx}\n` +
+    `Rules: explain reasoning before the answer; use simple language; show working step-by-step; keep replies under 200 words unless asked for more.`;
+
+  const chatHistory = history.slice(-6).map(h => ({
+    role: h.role === 'user' ? 'user' : 'model',
+    parts: [{ text: h.content }]
+  }));
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [
+        ...chatHistory,
+        { role: 'user', parts: [{ text: message }] }
+      ],
+      config: {
+        systemInstruction: systemPrompt,
+      }
+    });
+
+    const reply = (response.text || '').trim();
+    return sendJSON(res, 200, { reply: reply || null, fallback: !reply });
+  } catch (err) {
+    console.error('Gemini error:', err.message);
+    return sendJSON(res, 200, { reply: null, fallback: true });
+  }
+});
+
+/* ---- Quiz log ---- */
+app.post('/api/quiz/log', (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
+  const { subject, paper, score, total } = req.body;
+  if (!subject || !paper || score == null || total == null)
+    return sendJSON(res, 400, { error: 'subject, paper, score and total are required.' });
+  if (!tierAtLeast(user.tier, 'plus') && !FREE_UNLOCKED_SUBJECTS.includes(subject))
+    return sendJSON(res, 403, { error: 'upgrade_required', message: 'Upgrade to access this subject.' });
+  db.prepare('INSERT INTO quiz_attempts (user_id,subject,paper,score,total,created_at) VALUES (?,?,?,?,?,?)')
+    .run(user.id, subject, paper, score, total, new Date().toISOString());
+  logActivity(user.id, 'quiz_complete', { subject, paper, score, total });
+  return sendJSON(res, 201, { ok: true });
+});
+
+/* ---- Summary ---- */
+app.get('/api/summary', (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
+  const attempts = db.prepare('SELECT * FROM quiz_attempts WHERE user_id = ? ORDER BY created_at DESC').all(user.id);
+  const total    = attempts.length;
+  const avg      = total
+    ? Math.round((attempts.reduce((s, a) => s + a.score / a.total, 0) / total) * 100)
+    : 0;
+  return sendJSON(res, 200, { totalQuizzes: total, avgScorePct: avg, recent: attempts.slice(0, 5) });
+});
+
+/* ---- Plans ---- */
+app.get('/api/plans', (_req, res) => {
+  return sendJSON(res, 200, {
+    plans: [
+      { id: 'free', label: TIERS.free.label, price: TIERS.free.price,
+        features: [`Mathematics only`, `${FREE_TUTOR_DAILY_LIMIT} AI Tutor messages/day`, 'Varsity Hub & APS'] },
+      { id: 'plus', label: TIERS.plus.label, price: TIERS.plus.price,
+        features: ['Unlimited AI Tutor chats', 'All 4 subjects & papers', 'Everything in Free'] },
+      { id: 'pro',  label: TIERS.pro.label,  price: TIERS.pro.price,
+        features: ['Everything in Plus', 'Progress analytics', 'Study notes'] },
+    ],
+  });
+});
+
+/* ---- Subscribe (PayFast) ---- */
+app.post('/api/subscribe', (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
+  const { tier } = req.body;
+  if (!['plus', 'pro'].includes(tier))
+    return sendJSON(res, 400, { error: 'tier must be "plus" or "pro".' });
+  try {
+    const { fields, mPaymentId, action } = buildPaymentFields({ user, tier, appUrl: APP_URL });
+    db.prepare('INSERT INTO subscriptions (user_id,tier,m_payment_id,amount_gross,status,created_at) VALUES (?,?,?,?,?,?)')
+      .run(user.id, tier, mPaymentId, parseFloat(fields.amount), 'pending', new Date().toISOString());
+    db.prepare("UPDATE users SET subscription_status = 'pending' WHERE id = ?").run(user.id);
+    logActivity(user.id, 'subscribe_start', { tier });
+    return sendJSON(res, 200, { action, fields });
+  } catch (err) {
+    return sendJSON(res, 500, { error: err.message });
+  }
+});
+
+/* ---- PayFast ITN ---- */
+app.post('/api/payfast/notify', async (req, res) => {
+  const body = await readFormBody(req);
+  if (!verifyNotifySignature(body)) {
+    console.warn('PayFast ITN: invalid signature');
+    return res.status(400).send('invalid signature');
+  }
+  const sub = db.prepare('SELECT * FROM subscriptions WHERE m_payment_id = ?').get(body.m_payment_id);
+  if (!sub) return res.status(404).send('unknown payment');
+  db.prepare('UPDATE subscriptions SET status = ?, pf_payment_id = ?, raw_payload = ? WHERE id = ?')
+    .run(body.payment_status, body.pf_payment_id || null, JSON.stringify(body), sub.id);
+  if (body.payment_status === 'COMPLETE') {
+    db.prepare("UPDATE users SET tier = ?, subscription_status = 'active', payfast_token = ? WHERE id = ?")
+      .run(sub.tier, body.token || null, sub.user_id);
+    logActivity(sub.user_id, 'subscribe_active', { tier: sub.tier });
+  } else {
+    db.prepare("UPDATE users SET subscription_status = 'failed' WHERE id = ?").run(sub.user_id);
+  }
+  res.status(200).send('OK');
+});
+
+app.get('/api/subscription/status', (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
+  return sendJSON(res, 200, { tier: user.tier, status: user.subscription_status });
+});
+
+app.post('/api/subscription/cancel', (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
+  db.prepare("UPDATE users SET subscription_status = 'cancelled' WHERE id = ?").run(user.id);
+  logActivity(user.id, 'subscribe_cancelled', {});
+  return sendJSON(res, 200, { ok: true });
+});
+
+/* ---- Activity ping ---- */
+app.post('/api/activity/ping', (req, res) => {
+  const user = requireAuth(req, res);
+  if (!user) return;
+  db.prepare('INSERT INTO session_pings (user_id,view,created_at) VALUES (?,?,?)')
+    .run(user.id, req.body?.view || null, new Date().toISOString());
+  return sendJSON(res, 200, { ok: true });
+});
+
+/* ---- Admin ---- */
+app.get('/api/admin/stats', (req, res) => {
+  const admin = requireAdmin(req, res);
+  if (!admin) return;
+  const total    = db.prepare('SELECT COUNT(*) c FROM users WHERE is_admin = 0').get().c;
+  const byTier   = db.prepare('SELECT tier, COUNT(*) c FROM users WHERE is_admin = 0 GROUP BY tier').all();
+  const tierCounts = { free: 0, plus: 0, pro: 0 };
+  byTier.forEach(r => { tierCounts[r.tier] = r.c; });
+  const mrr      = tierCounts.plus * TIERS.plus.price + tierCounts.pro * TIERS.pro.price;
+  const dayAgo  = new Date(Date.now() - 86400000).toISOString();
+  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+  return sendJSON(res, 200, {
+    totalLearners: total,
+    tierCounts,
+    estimatedMRR: mrr,
+    activeToday: db.prepare('SELECT COUNT(*) c FROM users WHERE last_active_at >= ? AND is_admin=0').get(dayAgo).c,
+    activeWeek:  db.prepare('SELECT COUNT(*) c FROM users WHERE last_active_at >= ? AND is_admin=0').get(weekAgo).c,
+  });
+});
+
+app.get('/api/admin/learners', (req, res) => {
+  const admin = requireAdmin(req, res);
+  if (!admin) return;
+  const rows = db.prepare(`
+    SELECT u.id, u.name, u.email, u.grade, u.tier, u.subscription_status,
+           u.email_verified, u.created_at, u.last_active_at,
+           (SELECT COUNT(*) FROM quiz_attempts q WHERE q.user_id = u.id) quizCount,
+           (SELECT COALESCE(AVG(1.0*score/total), 0) FROM quiz_attempts q WHERE q.user_id = u.id) avgScore
+    FROM users u WHERE u.is_admin = 0 ORDER BY u.created_at DESC
+  `).all();
+  return sendJSON(res, 200, {
+    learners: rows.map(r => ({ ...r, avgScore: Math.round(r.avgScore * 100) })),
+  });
+});
+
+app.get('/api/admin/feed', (req, res) => {
+  const admin = requireAdmin(req, res);
+  if (!admin) return;
+  const rows = db.prepare(`
+    SELECT a.id, a.event_type, a.meta, a.created_at, u.name, u.email
+    FROM activity_log a JOIN users u ON u.id = a.user_id
+    ORDER BY a.created_at DESC LIMIT 100
+  `).all();
+  return sendJSON(res, 200, {
+    feed: rows.map(r => ({ ...r, meta: r.meta ? JSON.parse(r.meta) : {} })),
+  });
+});
+
+app.get('/api/admin/subscriptions', (req, res) => {
+  const admin = requireAdmin(req, res);
+  if (!admin) return;
+  const rows = db.prepare(`
+    SELECT s.*, u.name, u.email
+    FROM subscriptions s JOIN users u ON u.id = s.user_id
+    ORDER BY s.created_at DESC LIMIT 200
+  `).all();
+  return sendJSON(res, 200, { subscriptions: rows });
+});
+
+/* ---- Static frontend (serve index.html, css/, js/, admin.html) ---- */
+const FRONTEND = path.join(__dirname, '..');
+app.use(express.static(FRONTEND));
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(FRONTEND, 'index.html'));
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/*  Start                                                             */
+/* ------------------------------------------------------------------ */
+app.listen(PORT, () => {
+  console.log(`\n Xcelerate MathsAcademy`);
+  console.log(`    Open → http://localhost:3001`);
+  console.log(`    Admin → http://localhost:3001/admin.html`);
+  console.log(`    AI Engine → Google Gemini (model: gemini-2.5-flash)`);
+  console.log(`    PayFast → ${process.env.PAYFAST_SANDBOX !== 'false' ? 'SANDBOX' : 'LIVE'}`);
+  if (!process.env.SMTP_HOST) {
+    console.log(`    Email → console only (add SMTP_HOST to .env for real emails)`);
+  }
+  console.log('');
+});
