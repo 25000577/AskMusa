@@ -1130,7 +1130,7 @@ const Plans = (() => {
       price: 0,
       features: [
         'Mathematics quizzes (Paper 1 & 2)',
-        '5 AI Tutor messages per day',
+        'Unlimited AI Tutor chats',
         'Varsity Hub & APS calculator',
         'Exam countdown clock',
       ],
@@ -1142,7 +1142,6 @@ const Plans = (() => {
       name: 'MatricLab Plus',
       price: 30,
       features: [
-        'Unlimited AI Tutor chats',
         'All 4 subjects & past papers',
         'Subject-by-subject quiz history',
         'Everything in Free',
@@ -1259,7 +1258,6 @@ function showToast(msg, duration = 4000) {
 <script>
 const Tutor = (() => {
   const OLLAMA_PROXY = '/api/tutor';
-  const FREE_DAILY_LIMIT = 5;
 
   const SUBJECT_PROMPTS = {
     mathematics: [
@@ -1366,17 +1364,6 @@ const Tutor = (() => {
     if (!message.trim()) return;
 
     const user = Auth.user();
-
-    // Free-tier daily limit guard
-    if (!Auth.isPlus()) {
-      const todayKey = 'ml_msg_' + new Date().toDateString();
-      const count = parseInt(localStorage.getItem(todayKey) || '0', 10);
-      if (count >= FREE_DAILY_LIMIT) {
-        Plans.show(`You've used today's ${FREE_DAILY_LIMIT} free AI Tutor messages. Upgrade to MatricLab Plus for unlimited chats.`);
-        return;
-      }
-      localStorage.setItem(todayKey, count + 1);
-    }
 
     const input  = document.getElementById('chatInput');
     const sendBtn = document.querySelector('#chatForm button[type="submit"]');
