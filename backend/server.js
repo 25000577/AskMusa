@@ -82,6 +82,16 @@ db.exec(`
     pf_payment_id TEXT,
     created_at    TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS custom_quizzes (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject     TEXT NOT NULL,
+    paper       TEXT NOT NULL,
+    question    TEXT NOT NULL,
+    options     TEXT NOT NULL,
+    answer      TEXT NOT NULL,
+    explanation TEXT,
+    created_at  TEXT NOT NULL
+  );
 `);
 
 /* ------------------------------------------------------------------ */
@@ -445,28 +455,6 @@ app.get('/api/admin/subscriptions', (req, res) => {
   return sendJSON(res, 200, { subscriptions });
 });
 
-/* ---- Static frontend ---- */
-const FRONTEND = path.join(__dirname, '..');
-app.use(express.static(FRONTEND));
-
-// Explicit route to serve admin.html properly
-app.get('/admin.html', (_req, res) => {
-  res.sendFile(path.join(FRONTEND, 'admin.html'));
-});
-
-app.get('*', (req, res) => {
-  if (!req.path.startsWith('/api')) {
-    res.sendFile(path.join(FRONTEND, 'index.html'));
-  }
-});
-
-/* ------------------------------------------------------------------ */
-/*  Start Server                                                      */
-/* ------------------------------------------------------------------ */
-app.listen(PORT, () => {
-  console.log(`\n Xcelerate MathsAcademy (Free Edition)`);
-  console.log(`    Open → http://localhost:${PORT}`);
-  console.log(`    AI Engine → Google Gemini (gemini-2.5-flash)`);
-  console.log(`    Status → 100% Free & Unlimited`);
-  console.log('');
-});
+// Admin upload custom quiz question
+app.post('/api/admin/quizzes', (req, res) => {
+  const admin = require
