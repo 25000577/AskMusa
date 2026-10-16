@@ -576,7 +576,7 @@
   <!-- ============ AI TUTOR ============ -->
   <section class="view" id="view-tutor" data-view="tutor" hidden>
     <div class="view-head">
-      <p class="eyebrow">AI Tutor · Powered by Ollama</p>
+      <p class="eyebrow">AI Tutor · Powered by Google Gemini</p>
       <h1>Explain it until it clicks.</h1>
       <p class="view-head__sub">Pick a subject, ask in your own words. The tutor breaks answers into steps instead of just handing over the final line.</p>
     </div>
@@ -586,7 +586,6 @@
         <div class="chip-row" id="tutorSubjectChips"></div>
         <h3 class="tutor-side__title">Try asking</h3>
         <div class="prompt-list" id="tutorPrompts"></div>
-        <div class="tutor-side__note" id="tutorBackendNote"></div>
       </aside>
       <div class="tutor-main">
         <div class="chat-window" id="chatWindow" aria-live="polite"></div>
@@ -1000,11 +999,11 @@ function showToast(msg, duration = 4000) {
 <script src="js/quiz.js"></script>
 
 <!-- ============================================================
-     TUTOR MODULE (Ollama backend)
+     TUTOR MODULE (Google Gemini backend)
      ============================================================ -->
 <script>
 const Tutor = (() => {
-  const OLLAMA_PROXY = '/api/tutor';
+  const TUTOR_ENDPOINT = '/api/tutor';
 
   const SUBJECT_PROMPTS = {
     mathematics: [
@@ -1026,29 +1025,6 @@ const Tutor = (() => {
       'What is the difference between a primary and foreign key?',
       'Explain what a loop does and give an example.',
       'What is the purpose of a network protocol?',
-    ],
-  };
-
-  const OFFLINE_TIPS = {
-    mathematics: [
-      'Work through each step one at a time and write down what you know.',
-      'Check your answer by substituting back into the original equation.',
-      'Draw a sketch for geometry questions — it usually reveals the path forward.',
-    ],
-    'physical-sciences': [
-      'Identify which formula applies, then list your known and unknown values.',
-      'Always include units in your working — they often point to errors.',
-      'For electricity, draw the circuit and mark current directions first.',
-    ],
-    'life-sciences': [
-      'Use diagrams and labels — they force you to understand the structure.',
-      'Link every process to its purpose in the organism.',
-      'Learn the vocabulary: examiners award marks for the correct biological term.',
-    ],
-    'information-technology': [
-      'Trace through the code line-by-line with sample input values.',
-      'Entity names in SQL are exact — capitalisation matters.',
-      'Break big problems into smaller functions; test each part separately.',
     ],
   };
 
@@ -1110,11 +1086,9 @@ const Tutor = (() => {
   async function send(message) {
     if (!message.trim()) return;
 
-    const user = Auth.user();
-
     const input  = document.getElementById('chatInput');
     const sendBtn = document.querySelector('#chatForm button[type="submit"]');
-    input.value  = '';
+    input.value = '';
     input.disabled = true;
     sendBtn.disabled = true;
 
@@ -1122,38 +1096,44 @@ const Tutor = (() => {
     chatHistory.push({ role: 'user', content: message });
 
     const typing = appendTyping();
-    let reply = null;
 
     try {
-      const res = await fetch(OLLAMA_PROXY, {
+      const res = await fetch(TUTOR_ENDPOINT, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(Auth.token() ? { 'Authorization': `Bearer ${Auth.token()}` } : {}),
+          'Authorization': `Bearer ${Auth.token()}`,
         },
-        body: JSON.stringify({ subject: activeSubject, message, history: chatHistory.slice(-8) }),
+        body: JSON.stringify({
+          subject: activeSubject,
+          message,
+          history: chatHistory.slice(-8)
+        }),
       });
-      if (res.ok) {
-        const data = await res.json();
-        reply = data.reply || data.answer || data.response || null;
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Tutor request failed.');
       }
-    } catch (_) { /* fall through to offline tip */ }
 
-    typing.remove();
+      const reply = data.reply;
 
-    const final = reply || offlineTip(activeSubject);
-    appendMsg('assistant', final);
-    chatHistory.push({ role: 'assistant', content: final });
-
-    input.disabled = false;
-    sendBtn.disabled = false;
-    input.focus();
-
-    if (!reply) {
-      const note = document.getElementById('tutorBackendNote');
-      if (!note.textContent) {
-        note.textContent = '⚠ Ollama offline mode — make sure Ollama is running (ollama serve) and llama3 is pulled. The backend proxies to http://localhost:11434/api/generate.';
+      if (typeof reply !== 'string' || !reply.trim()) {
+        throw new Error('The tutor returned an empty reply.');
       }
+
+      typing.remove();
+      appendMsg('assistant', reply);
+      chatHistory.push({ role: 'assistant', content: reply });
+
+    } catch (error) {
+      typing.remove();
+      appendMsg('assistant', `Sorry, I couldn't get a response from the tutor. ${error.message}`);
+    } finally {
+      input.disabled = false;
+      sendBtn.disabled = false;
+      input.focus();
     }
   }
 
