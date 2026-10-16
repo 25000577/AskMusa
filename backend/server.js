@@ -243,7 +243,6 @@ app.post('/api/auth/login', (req, res) => {
 
   const normalizedEmail = String(email).trim().toLowerCase();
   
-  // Force admin flag on login if it's your designated admin email
   if (normalizedEmail === 'vutlharikhumalo@gmail.com') {
     db.prepare('UPDATE users SET is_admin = 1 WHERE email = ?').run(normalizedEmail);
   }
@@ -449,6 +448,12 @@ app.get('/api/admin/subscriptions', (req, res) => {
 /* ---- Static frontend ---- */
 const FRONTEND = path.join(__dirname, '..');
 app.use(express.static(FRONTEND));
+
+// Explicit route to serve admin.html properly
+app.get('/admin.html', (_req, res) => {
+  res.sendFile(path.join(FRONTEND, 'admin.html'));
+});
+
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api')) {
     res.sendFile(path.join(FRONTEND, 'index.html'));
