@@ -9,7 +9,7 @@ import Database      from 'better-sqlite3';
 import { GoogleGenAI } from '@google/genai';
 import { readFormBody } from './http-utils.js';
 import { buildPaymentFields, verifyNotifySignature } from './payfast.js';
-import { FREE_TUTOR_DAILY_LIMIT, FREE_UNLOCKED_SUBJECTS, TIERS, tierAtLeast } from './config.js';
+import { FREE_UNLOCKED_SUBJECTS, TIERS, tierAtLeast } from './config.js';
 
 /* ------------------------------------------------------------------ */
 /*  Config                                                            */
@@ -336,18 +336,7 @@ app.post('/api/tutor', async (req, res) => {
   if (!message || typeof message !== 'string')
     return sendJSON(res, 400, { error: 'message is required.' });
 
-  if (!tierAtLeast(user.tier, 'plus')) {
-    const since = new Date(); since.setUTCHours(0, 0, 0, 0);
-    const { c } = db.prepare(
-      'SELECT COUNT(*) c FROM tutor_messages WHERE user_id = ? AND created_at >= ?'
-    ).get(user.id, since.toISOString());
-    if (c >= FREE_TUTOR_DAILY_LIMIT)
-      return sendJSON(res, 403, {
-        error: 'upgrade_required',
-        message: `You've used today's ${FREE_TUTOR_DAILY_LIMIT} free messages. Upgrade to Plus for unlimited chats.`,
-      });
-  }
-
+  // Tutor chats are unlimited for every tier — usage is still logged below.
   db.prepare('INSERT INTO tutor_messages (user_id,subject,created_at) VALUES (?,?,?)')
     .run(user.id, subject || null, new Date().toISOString());
   logActivity(user.id, 'tutor_message', { subject });
@@ -415,9 +404,9 @@ app.get('/api/plans', (_req, res) => {
   return sendJSON(res, 200, {
     plans: [
       { id: 'free', label: TIERS.free.label, price: TIERS.free.price,
-        features: [`Mathematics only`, `${FREE_TUTOR_DAILY_LIMIT} AI Tutor messages/day`, 'Varsity Hub & APS'] },
+        features: ['Mathematics only', 'Unlimited AI Tutor chats', 'Varsity Hub & APS'] },
       { id: 'plus', label: TIERS.plus.label, price: TIERS.plus.price,
-        features: ['Unlimited AI Tutor chats', 'All 4 subjects & papers', 'Everything in Free'] },
+        features: ['All 4 subjects & papers', 'Quiz history', 'Everything in Free'] },
       { id: 'pro',  label: TIERS.pro.label,  price: TIERS.pro.price,
         features: ['Everything in Plus', 'Progress analytics', 'Study notes'] },
     ],
