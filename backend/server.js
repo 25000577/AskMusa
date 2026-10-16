@@ -7,8 +7,6 @@ import path          from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database      from 'better-sqlite3';
 import { GoogleGenAI } from '@google/genai';
-import { readFormBody } from './http-utils.js';
-import { buildPaymentFields, verifyNotifySignature } from './payfast.js';
 import { TIERS } from './config.js';
 
 /* ------------------------------------------------------------------ */
@@ -39,8 +37,7 @@ db.exec(`
     password_salt         TEXT NOT NULL,
     grade                 TEXT DEFAULT 'Grade 12',
     tier                  TEXT DEFAULT 'free',
-    subscription_status   TEXT DEFAULT 'none',
-    payfast_token         TEXT,
+    subscription_status   TEXT DEFAULT 'active',
     is_admin              INTEGER DEFAULT 0,
     email_verified        INTEGER DEFAULT 0,
     verify_token          TEXT,
@@ -62,17 +59,6 @@ db.exec(`
     user_id       INTEGER NOT NULL,
     subject       TEXT,
     created_at    TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS subscriptions (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id             INTEGER NOT NULL,
-    tier                TEXT NOT NULL,
-    m_payment_id        TEXT NOT NULL,
-    amount_gross        REAL,
-    status              TEXT DEFAULT 'pending',
-    pf_payment_id       TEXT,
-    raw_payload         TEXT,
-    created_at          TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS activity_log (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -163,7 +149,7 @@ function requireAdmin(req, res) {
 function publicUser(u) {
   return {
     id: u.id, name: u.name, email: u.email, grade: u.grade,
-    tier: u.tier, subscription_status: u.subscription_status,
+    tier: 'free', subscription_status: 'active',
     email_verified: !!u.email_verified, is_admin: !!u.is_admin,
   };
 }
@@ -174,7 +160,7 @@ function logActivity(userId, eventType, meta) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Seed admin account (on every start if env vars are set)           */
+/*  Seed admin account                                                */
 /* ------------------------------------------------------------------ */
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_PASS  = process.env.ADMIN_PASSWORD;
@@ -192,42 +178,7 @@ if (ADMIN_EMAIL && ADMIN_PASS) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Email verification                                                */
-/* ------------------------------------------------------------------ */
-async function sendVerificationEmail(user, token) {
-  const link = `${APP_URL}/api/auth/verify?token=${token}`;
-  console.log('\n📧 Verify link for', user.email, '\n    ', link, '\n');
-
-  if (process.env.SMTP_HOST) {
-    try {
-      const nodemailer = await import('nodemailer');
-      const transport  = nodemailer.default.createTransport({
-        host:   process.env.SMTP_HOST,
-        port:   parseInt(process.env.SMTP_PORT || '587'),
-        secure: process.env.SMTP_SECURE === 'true',
-        auth:   { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-      });
-      await transport.sendMail({
-        from:   `"Xcelerate MathsAcademy" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
-        to:      user.email,
-        subject: 'Verify your Xcelerate MathsAcademy account',
-        html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;">
-          <h2>Hi ${user.name} 👋</h2>
-          <p>Click below to verify your email address:</p>
-          <a href="${link}" style="display:inline-block;margin:20px 0;padding:14px 28px;
-             background:#ffb627;color:#0e1525;font-weight:700;border-radius:8px;
-             text-decoration:none;">Verify my email</a>
-          <p style="color:#888;font-size:0.83rem;">Expires in 24 hours.</p>
-        </div>`,
-      });
-    } catch (err) {
-      console.error('✗ Email send failed:', err.message);
-    }
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/*  Express                                                           */
+/*  Express Setup                                                     */
 /* ------------------------------------------------------------------ */
 const app = express();
 app.use(cors());
@@ -266,7 +217,6 @@ app.post('/api/auth/signup', (req, res) => {
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(result.lastInsertRowid);
   logActivity(user.id, 'signup', {});
-  sendVerificationEmail(user, vToken); // fire-and-forget
 
   const token = signToken({ sub: user.id });
   return sendJSON(res, 201, { token, user: publicUser(user) });
@@ -295,32 +245,7 @@ app.get('/api/auth/me', (req, res) => {
   return sendJSON(res, 200, { user: publicUser(user) });
 });
 
-app.post('/api/auth/resend-verify', (req, res) => {
-  const user = requireAuth(req, res);
-  if (!user) return;
-  if (user.email_verified) return sendJSON(res, 200, { ok: true });
-  const token   = crypto.randomBytes(32).toString('hex');
-  const expires = new Date(Date.now() + 86400000).toISOString();
-  db.prepare('UPDATE users SET verify_token = ?, verify_expires = ? WHERE id = ?')
-    .run(token, expires, user.id);
-  sendVerificationEmail(user, token);
-  return sendJSON(res, 200, { ok: true });
-});
-
-app.get('/api/auth/verify', (req, res) => {
-  const { token } = req.query;
-  if (!token) return res.status(400).send('Missing token.');
-  const user = db.prepare('SELECT * FROM users WHERE verify_token = ?').get(token);
-  if (!user) return res.status(400).send('Invalid or already-used verification link.');
-  if (new Date(user.verify_expires) < new Date())
-    return res.status(400).send('Verification link has expired — request a new one.');
-  db.prepare('UPDATE users SET email_verified = 1, verify_token = NULL, verify_expires = NULL WHERE id = ?')
-    .run(user.id);
-  logActivity(user.id, 'email_verified', {});
-  res.redirect(`${APP_URL}/?verified=1`);
-});
-
-/* ---- AI Tutor (Gemini integration - Completely Unlimited) ---- */
+/* ---- AI Tutor (Gemini integration - Unlimited & Free) ---- */
 const SUBJECT_SYSTEM = {
   'mathematics':            'CAPS Grade 12 Mathematics: algebra, functions, calculus, trigonometry, geometry and statistics.',
   'physical-sciences':      'CAPS Grade 12 Physical Sciences: mechanics, electricity, waves and chemical systems.',
@@ -336,7 +261,6 @@ app.post('/api/tutor', async (req, res) => {
   if (!message || typeof message !== 'string')
     return sendJSON(res, 400, { error: 'message is required.' });
 
-  // Log message activity without restricting limits
   db.prepare('INSERT INTO tutor_messages (user_id,subject,created_at) VALUES (?,?,?)')
     .run(user.id, subject || null, new Date().toISOString());
   logActivity(user.id, 'tutor_message', { subject });
@@ -372,7 +296,7 @@ app.post('/api/tutor', async (req, res) => {
   }
 });
 
-/* ---- Quiz log (Unlocked for all subjects) ---- */
+/* ---- Quiz log ---- */
 app.post('/api/quiz/log', (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
@@ -398,68 +322,21 @@ app.get('/api/summary', (req, res) => {
   return sendJSON(res, 200, { totalQuizzes: total, avgScorePct: avg, recent: attempts.slice(0, 5) });
 });
 
-/* ---- Plans ---- */
+/* ---- Plans & Subscriptions (Bypassed as Free) ---- */
 app.get('/api/plans', (_req, res) => {
   return sendJSON(res, 200, {
-    plans: [
-      { id: 'free', label: TIERS.free?.label || 'Free', price: 0,
-        features: ['All subjects & papers', 'Unlimited AI Tutor chats', 'Varsity Hub & APS'] },
-    ],
+    plans: [{ id: 'free', label: 'Free & Unlocked', price: 0, features: ['All features unlocked'] }]
   });
 });
 
-/* ---- Subscribe (PayFast) ---- */
 app.post('/api/subscribe', (req, res) => {
-  const user = requireAuth(req, res);
-  if (!user) return;
-  const { tier } = req.body;
-  if (!['plus', 'pro'].includes(tier))
-    return sendJSON(res, 400, { error: 'tier must be "plus" or "pro".' });
-  try {
-    const { fields, mPaymentId, action } = buildPaymentFields({ user, tier, appUrl: APP_URL });
-    db.prepare('INSERT INTO subscriptions (user_id,tier,m_payment_id,amount_gross,status,created_at) VALUES (?,?,?,?,?,?)')
-      .run(user.id, tier, mPaymentId, parseFloat(fields.amount), 'pending', new Date().toISOString());
-    db.prepare("UPDATE users SET subscription_status = 'pending' WHERE id = ?").run(user.id);
-    logActivity(user.id, 'subscribe_start', { tier });
-    return sendJSON(res, 200, { action, fields });
-  } catch (err) {
-    return sendJSON(res, 500, { error: err.message });
-  }
-});
-
-/* ---- PayFast ITN ---- */
-app.post('/api/payfast/notify', async (req, res) => {
-  const body = await readFormBody(req);
-  if (!verifyNotifySignature(body)) {
-    console.warn('PayFast ITN: invalid signature');
-    return res.status(400).send('invalid signature');
-  }
-  const sub = db.prepare('SELECT * FROM subscriptions WHERE m_payment_id = ?').get(body.m_payment_id);
-  if (!sub) return res.status(404).send('unknown payment');
-  db.prepare('UPDATE subscriptions SET status = ?, pf_payment_id = ?, raw_payload = ? WHERE id = ?')
-    .run(body.payment_status, body.pf_payment_id || null, JSON.stringify(body), sub.id);
-  if (body.payment_status === 'COMPLETE') {
-    db.prepare("UPDATE users SET tier = ?, subscription_status = 'active', payfast_token = ? WHERE id = ?")
-      .run(sub.tier, body.token || null, sub.user_id);
-    logActivity(sub.user_id, 'subscribe_active', { tier: sub.tier });
-  } else {
-    db.prepare("UPDATE users SET subscription_status = 'failed' WHERE id = ?").run(sub.user_id);
-  }
-  res.status(200).send('OK');
+  return sendJSON(res, 200, { ok: true, message: 'App is completely free!' });
 });
 
 app.get('/api/subscription/status', (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
-  return sendJSON(res, 200, { tier: user.tier, status: user.subscription_status });
-});
-
-app.post('/api/subscription/cancel', (req, res) => {
-  const user = requireAuth(req, res);
-  if (!user) return;
-  db.prepare("UPDATE users SET subscription_status = 'cancelled' WHERE id = ?").run(user.id);
-  logActivity(user.id, 'subscribe_cancelled', {});
-  return sendJSON(res, 200, { ok: true });
+  return sendJSON(res, 200, { tier: 'free', status: 'active' });
 });
 
 /* ---- Activity ping ---- */
@@ -475,61 +352,11 @@ app.post('/api/activity/ping', (req, res) => {
 app.get('/api/admin/stats', (req, res) => {
   const admin = requireAdmin(req, res);
   if (!admin) return;
-  const total    = db.prepare('SELECT COUNT(*) c FROM users WHERE is_admin = 0').get().c;
-  const byTier   = db.prepare('SELECT tier, COUNT(*) c FROM users WHERE is_admin = 0 GROUP BY tier').all();
-  const tierCounts = { free: 0, plus: 0, pro: 0 };
-  byTier.forEach(r => { tierCounts[r.tier] = r.c; });
-  const dayAgo  = new Date(Date.now() - 86400000).toISOString();
-  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
-  return sendJSON(res, 200, {
-    totalLearners: total,
-    tierCounts,
-    estimatedMRR: 0,
-    activeToday: db.prepare('SELECT COUNT(*) c FROM users WHERE last_active_at >= ? AND is_admin=0').get(dayAgo).c,
-    activeWeek:  db.prepare('SELECT COUNT(*) c FROM users WHERE last_active_at >= ? AND is_admin=0').get(weekAgo).c,
-  });
+  const total = db.prepare('SELECT COUNT(*) c FROM users WHERE is_admin = 0').get().c;
+  return sendJSON(res, 200, { totalLearners: total, tierCounts: { free: total }, estimatedMRR: 0 });
 });
 
-app.get('/api/admin/learners', (req, res) => {
-  const admin = requireAdmin(req, res);
-  if (!admin) return;
-  const rows = db.prepare(`
-    SELECT u.id, u.name, u.email, u.grade, u.tier, u.subscription_status,
-           u.email_verified, u.created_at, u.last_active_at,
-           (SELECT COUNT(*) FROM quiz_attempts q WHERE q.user_id = u.id) quizCount,
-           (SELECT COALESCE(AVG(1.0*score/total), 0) FROM quiz_attempts q WHERE q.user_id = u.id) avgScore
-    FROM users u WHERE u.is_admin = 0 ORDER BY u.created_at DESC
-  `).all();
-  return sendJSON(res, 200, {
-    learners: rows.map(r => ({ ...r, avgScore: Math.round(r.avgScore * 100) })),
-  });
-});
-
-app.get('/api/admin/feed', (req, res) => {
-  const admin = requireAdmin(req, res);
-  if (!admin) return;
-  const rows = db.prepare(`
-    SELECT a.id, a.event_type, a.meta, a.created_at, u.name, u.email
-    FROM activity_log a JOIN users u ON u.id = a.user_id
-    ORDER BY a.created_at DESC LIMIT 100
-  `).all();
-  return sendJSON(res, 200, {
-    feed: rows.map(r => ({ ...r, meta: r.meta ? JSON.parse(r.meta) : {} })),
-  });
-});
-
-app.get('/api/admin/subscriptions', (req, res) => {
-  const admin = requireAdmin(req, res);
-  if (!admin) return;
-  const rows = db.prepare(`
-    SELECT s.*, u.name, u.email
-    FROM subscriptions s JOIN users u ON u.id = s.user_id
-    ORDER BY s.created_at DESC LIMIT 200
-  `).all();
-  return sendJSON(res, 200, { subscriptions: rows });
-});
-
-/* ---- Static frontend (serve index.html, css/, js/, admin.html) ---- */
+/* ---- Static frontend ---- */
 const FRONTEND = path.join(__dirname, '..');
 app.use(express.static(FRONTEND));
 app.get('*', (req, res) => {
@@ -539,13 +366,12 @@ app.get('*', (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
-/*  Start                                                             */
+/*  Start Server                                                      */
 /* ------------------------------------------------------------------ */
 app.listen(PORT, () => {
-  console.log(`\n Xcelerate MathsAcademy`);
-  console.log(`    Open → http://localhost:3001`);
-  console.log(`    Admin → http://localhost:3001/admin.html`);
-  console.log(`    AI Engine → Google Gemini (model: gemini-2.5-flash)`);
-  console.log(`    Limits → FREE & UNLIMITED`);
+  console.log(`\n Xcelerate MathsAcademy (Free Edition)`);
+  console.log(`    Open → http://localhost:${PORT}`);
+  console.log(`    AI Engine → Google Gemini (gemini-2.5-flash)`);
+  console.log(`    Status → 100% Free & Unlimited`);
   console.log('');
 });
