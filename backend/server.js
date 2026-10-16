@@ -9,7 +9,7 @@ import Database      from 'better-sqlite3';
 import { GoogleGenAI } from '@google/genai';
 import { readFormBody } from './http-utils.js';
 import { buildPaymentFields, verifyNotifySignature } from './payfast.js';
-import { FREE_UNLOCKED_SUBJECTS, TIERS, tierAtLeast } from './config.js';
+import { TIERS } from './config.js';
 
 /* ------------------------------------------------------------------ */
 /*  Config                                                            */
@@ -320,7 +320,7 @@ app.get('/api/auth/verify', (req, res) => {
   res.redirect(`${APP_URL}/?verified=1`);
 });
 
-/* ---- AI Tutor (Gemini integration) ---- */
+/* ---- AI Tutor (Gemini integration - Completely Unlimited) ---- */
 const SUBJECT_SYSTEM = {
   'mathematics':            'CAPS Grade 12 Mathematics: algebra, functions, calculus, trigonometry, geometry and statistics.',
   'physical-sciences':      'CAPS Grade 12 Physical Sciences: mechanics, electricity, waves and chemical systems.',
@@ -336,7 +336,7 @@ app.post('/api/tutor', async (req, res) => {
   if (!message || typeof message !== 'string')
     return sendJSON(res, 400, { error: 'message is required.' });
 
-  // Tutor chats are unlimited for every tier — usage is still logged below.
+  // Log message activity without restricting limits
   db.prepare('INSERT INTO tutor_messages (user_id,subject,created_at) VALUES (?,?,?)')
     .run(user.id, subject || null, new Date().toISOString());
   logActivity(user.id, 'tutor_message', { subject });
@@ -372,15 +372,14 @@ app.post('/api/tutor', async (req, res) => {
   }
 });
 
-/* ---- Quiz log ---- */
+/* ---- Quiz log (Unlocked for all subjects) ---- */
 app.post('/api/quiz/log', (req, res) => {
   const user = requireAuth(req, res);
   if (!user) return;
   const { subject, paper, score, total } = req.body;
   if (!subject || !paper || score == null || total == null)
     return sendJSON(res, 400, { error: 'subject, paper, score and total are required.' });
-  if (!tierAtLeast(user.tier, 'plus') && !FREE_UNLOCKED_SUBJECTS.includes(subject))
-    return sendJSON(res, 403, { error: 'upgrade_required', message: 'Upgrade to access this subject.' });
+
   db.prepare('INSERT INTO quiz_attempts (user_id,subject,paper,score,total,created_at) VALUES (?,?,?,?,?,?)')
     .run(user.id, subject, paper, score, total, new Date().toISOString());
   logActivity(user.id, 'quiz_complete', { subject, paper, score, total });
@@ -403,12 +402,8 @@ app.get('/api/summary', (req, res) => {
 app.get('/api/plans', (_req, res) => {
   return sendJSON(res, 200, {
     plans: [
-      { id: 'free', label: TIERS.free.label, price: TIERS.free.price,
-        features: ['Mathematics only', 'Unlimited AI Tutor chats', 'Varsity Hub & APS'] },
-      { id: 'plus', label: TIERS.plus.label, price: TIERS.plus.price,
-        features: ['All 4 subjects & papers', 'Quiz history', 'Everything in Free'] },
-      { id: 'pro',  label: TIERS.pro.label,  price: TIERS.pro.price,
-        features: ['Everything in Plus', 'Progress analytics', 'Study notes'] },
+      { id: 'free', label: TIERS.free?.label || 'Free', price: 0,
+        features: ['All subjects & papers', 'Unlimited AI Tutor chats', 'Varsity Hub & APS'] },
     ],
   });
 });
@@ -484,13 +479,12 @@ app.get('/api/admin/stats', (req, res) => {
   const byTier   = db.prepare('SELECT tier, COUNT(*) c FROM users WHERE is_admin = 0 GROUP BY tier').all();
   const tierCounts = { free: 0, plus: 0, pro: 0 };
   byTier.forEach(r => { tierCounts[r.tier] = r.c; });
-  const mrr      = tierCounts.plus * TIERS.plus.price + tierCounts.pro * TIERS.pro.price;
   const dayAgo  = new Date(Date.now() - 86400000).toISOString();
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
   return sendJSON(res, 200, {
     totalLearners: total,
     tierCounts,
-    estimatedMRR: mrr,
+    estimatedMRR: 0,
     activeToday: db.prepare('SELECT COUNT(*) c FROM users WHERE last_active_at >= ? AND is_admin=0').get(dayAgo).c,
     activeWeek:  db.prepare('SELECT COUNT(*) c FROM users WHERE last_active_at >= ? AND is_admin=0').get(weekAgo).c,
   });
@@ -552,9 +546,6 @@ app.listen(PORT, () => {
   console.log(`    Open → http://localhost:3001`);
   console.log(`    Admin → http://localhost:3001/admin.html`);
   console.log(`    AI Engine → Google Gemini (model: gemini-2.5-flash)`);
-  console.log(`    PayFast → ${process.env.PAYFAST_SANDBOX !== 'false' ? 'SANDBOX' : 'LIVE'}`);
-  if (!process.env.SMTP_HOST) {
-    console.log(`    Email → console only (add SMTP_HOST to .env for real emails)`);
-  }
+  console.log(`    Limits → FREE & UNLIMITED`);
   console.log('');
 });
