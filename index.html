@@ -11,8 +11,39 @@
 
 <style>
 
-/* global helper so .hidden works everywhere (nav upgrade button, overlays, etc.) */
+/* global helper so .hidden works everywhere */
 .hidden { display: none !important; }
+
+/* "100% free" banner */
+.free-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: linear-gradient(135deg, rgba(255,182,39,0.12) 0%, rgba(54,194,180,0.08) 100%);
+  border: 1px solid var(--amber);
+  border-radius: var(--radius-md);
+  padding: 14px 18px;
+  margin: 0 0 24px;
+}
+.free-banner__pill {
+  background: var(--amber);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 5px 12px;
+  border-radius: 99px;
+  white-space: nowrap;
+}
+.free-banner p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--chalk);
+}
+@media (max-width: 600px) {
+  .free-banner { flex-direction: column; align-items: flex-start; }
+}
 
 .auth-overlay {
   position: fixed;
@@ -191,120 +222,6 @@
 }
 
 /* ============================================================
-   PLAN PICKER — shown after signup / before app loads
-   ============================================================ */
-.plan-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 190;
-  background: rgba(10,14,26,0.95);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-}
-.plan-overlay.hidden { display: none; }
-
-.plan-card-wrap {
-  width: 100%;
-  max-width: 820px;
-}
-.plan-card-wrap h2 {
-  text-align: center;
-  font-size: 1.8rem;
-  margin-bottom: 8px;
-}
-.plan-card-wrap > p {
-  text-align: center;
-  color: var(--chalk-dim);
-  margin-bottom: 36px;
-}
-
-.plan-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 18px;
-}
-
-.plan-tile {
-  background: var(--surface);
-  border: 1px solid var(--surface-line);
-  border-radius: var(--radius-lg);
-  padding: 28px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  cursor: pointer;
-  transition: border-color 0.18s, transform 0.18s;
-  position: relative;
-}
-.plan-tile:hover { border-color: var(--amber); transform: translateY(-3px); }
-.plan-tile.popular {
-  border-color: var(--amber);
-  background: linear-gradient(160deg, rgba(255,182,39,0.08) 0%, var(--surface) 60%);
-}
-.plan-tile__badge {
-  position: absolute;
-  top: -12px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: var(--amber);
-  color: var(--ink);
-  font-size: 0.7rem;
-  font-weight: 700;
-  padding: 3px 12px;
-  border-radius: 99px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  white-space: nowrap;
-}
-.plan-tile__name {
-  font-family: var(--font-display);
-  font-size: 1.1rem;
-  font-weight: 700;
-}
-.plan-tile__price {
-  font-family: var(--font-display);
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--amber);
-}
-.plan-tile__price span {
-  font-size: 0.9rem;
-  color: var(--chalk-dim);
-  font-weight: 400;
-}
-.plan-tile__features {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex: 1;
-}
-.plan-tile__features li {
-  font-size: 0.84rem;
-  color: var(--chalk-dim);
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-}
-.plan-tile__features li::before {
-  content: "✓";
-  color: var(--teal);
-  font-weight: 700;
-  flex-shrink: 0;
-}
-.plan-tile__cta {
-  width: 100%;
-  padding: 12px;
-  font-size: 0.9rem;
-  font-weight: 700;
-}
-
-/* ============================================================
    ABOUT PAGE
    ============================================================ */
 .about-hero {
@@ -443,16 +360,6 @@
   border: none;
   cursor: pointer;
 }
-.topbar-tier {
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  color: var(--chalk-faint);
-  border: 1px solid var(--surface-line);
-  border-radius: 6px;
-  padding: 3px 8px;
-}
-.topbar-tier.plus { color: var(--amber); border-color: var(--amber); }
-.topbar-tier.pro  { color: var(--teal); border-color: var(--teal); }
 #btnLogout {
   background: transparent;
   border: 1px solid var(--surface-line);
@@ -463,18 +370,6 @@
   cursor: pointer;
 }
 #btnLogout:hover { color: var(--coral); border-color: var(--coral); }
-
-/* upgrade pill in nav */
-.nav__upgrade {
-  background: var(--amber);
-  color: var(--ink);
-  border: none;
-  padding: 9px 18px;
-  border-radius: 999px;
-  font-size: 0.88rem;
-  font-weight: 700;
-  cursor: pointer;
-}
 
 /* lock badge on subject cards */
 .lock-badge {
@@ -501,15 +396,11 @@
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* payfast form hidden */
-#payfastForm { display: none; }
-
 @media (max-width: 920px) {
   .about-hero { grid-template-columns: 1fr; }
   .about-photo-wrap { max-width: 320px; }
   .about-stats { grid-template-columns: 1fr 1fr; }
   .about-story { grid-template-columns: 1fr; }
-  .plan-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 600px) {
   .auth-card { padding: 28px 22px; }
@@ -578,22 +469,6 @@
 </div>
 
 <!-- ============================================================
-     PLAN PICKER OVERLAY
-     ============================================================ -->
-<div class="plan-overlay hidden" id="planOverlay">
-  <div class="plan-card-wrap">
-    <h2>Choose your plan</h2>
-    <p>You can switch or upgrade at any time from your account.</p>
-    <div class="plan-grid" id="planGrid"></div>
-  </div>
-</div>
-
-<!-- Hidden PayFast auto-submit form (same-tab redirect so browsers don't block it) -->
-<form id="payfastForm" method="POST">
-  <!-- fields injected by JS -->
-</form>
-
-<!-- ============================================================
      TOPBAR
      ============================================================ -->
 <header class="topbar">
@@ -609,11 +484,9 @@
       <button class="nav__link" data-nav="quiz">Quiz Room</button>
       <button class="nav__link" data-nav="varsity">Varsity Hub</button>
       <button class="nav__link" data-nav="about">About</button>
-      <button class="nav__upgrade hidden" id="navUpgrade" onclick="Plans.show()">⚡ Upgrade</button>
     </nav>
 
     <div class="topbar-user" id="topbarUser" style="display:none;">
-      <span class="topbar-tier" id="topbarTier">Free</span>
       <button class="topbar-avatar" id="topbarAvatar" title="Account">M</button>
       <button id="btnLogout" onclick="Auth.logout()">Log out</button>
     </div>
@@ -627,7 +500,7 @@
 <!-- email verify banner (shown when logged in but email not verified) -->
 <div id="verifyBanner" style="display:none;padding:0 28px;max-width:1180px;margin:16px auto 0;">
   <div class="verify-banner">
-    <span>📧 Please verify your email address to unlock all features.</span>
+    <span>📧 Please verify your email address to keep your account secure.</span>
     <button onclick="Auth.resendVerification()">Resend email</button>
   </div>
 </div>
@@ -657,6 +530,11 @@
           <span class="clock-readout__date" id="clockDate">—</span>
         </div>
       </div>
+    </div>
+
+    <div class="free-banner">
+      <span class="free-banner__pill">100% FREE</span>
+      <p>All subjects, past papers, quizzes and AI Tutor chats are free and unlimited for every learner. No subscriptions, no limits.</p>
     </div>
 
     <div class="stat-row">
@@ -725,7 +603,7 @@
     <div class="view-head">
       <p class="eyebrow">Quiz Room</p>
       <h1>Sit the paper before the paper sits you.</h1>
-      <p class="view-head__sub">Short, exam-style sets per subject — marked instantly, with the reasoning behind every answer.</p>
+      <p class="view-head__sub">Short, exam-style sets for every subject, all free and unlocked, marked instantly with the reasoning behind every answer.</p>
     </div>
     <div id="quizPicker" class="quiz-picker">
       <div class="subject-grid" id="quizSubjects"></div>
@@ -794,14 +672,12 @@
           cost more than a week of groceries.
         </p>
         <p class="about-hero__body" style="margin-top:14px;">
-          So I built this one. It uses Ollama running locally so your data stays private, integrates
-          PayFast so South African learners can subscribe affordably in Rands, and covers
-          the exact subjects and paper structure you'll face in October.
+          So I built this one, and it's 100% free. Every subject, every past paper, every quiz
+          and unlimited AI Tutor chats, for every learner, with no subscriptions and no payments.
+          It covers the exact subjects and paper structure you'll face in October.
         </p>
         <div style="margin-top:28px;display:flex;gap:12px;flex-wrap:wrap;">
-          <button class="btn btn--primary" data-nav="tutor">Try the AI Tutor</button>
-          <button class="btn btn--ghost" onclick="Plans.show()">View pricing</button>
-        </div>
+          <button class="btn btn--primary" data-nav="tutor">Try the AI Tutor</button>        </div>
       </div>
       <div class="about-photo-wrap">
         <img src="photo.jpg" alt="Matimba Khumalo" class="about-photo">
@@ -822,8 +698,8 @@
         <div class="about-stat__label">Original exam-style questions</div>
       </div>
       <div class="about-stat">
-        <div class="about-stat__num">R30</div>
-        <div class="about-stat__label">Plus plan — per month</div>
+        <div class="about-stat__num">100%</div>
+        <div class="about-stat__label">Free &amp; unlimited for everyone</div>
       </div>
     </div>
 
@@ -838,11 +714,11 @@
         </p>
       </div>
       <div class="about-story-card">
-        <h3>💳 Why PayFast?</h3>
+        <h3>🎓 Free for every learner</h3>
         <p>
-          PayFast is South Africa's most widely-used payment gateway and supports EFT, card,
-          and SnapScan — things that actually work here. No need for a credit card or a Stripe
-          account. Subscriptions are billed monthly in ZAR and you can cancel any time.
+          Every subject, past paper, quiz and AI Tutor chat is open to everyone, with nothing
+          locked and no daily limits. You never need a credit card, a subscription or a
+          payment of any kind to use Xcelerate MathsAcademy.
         </p>
       </div>
       <div class="about-story-card">
@@ -865,18 +741,16 @@
 
     <div class="about-cta">
       <h2>Ready to start revising?</h2>
-      <p>Create a free account in 30 seconds. No credit card needed for the free tier.</p>
+      <p>Create a free account in 30 seconds. Every subject, paper, quiz and tutor chat is free and unlimited.</p>
       <div class="about-cta__actions">
-        <button class="btn btn--primary" onclick="Auth.showTab('signup');document.getElementById('authOverlay').classList.remove('hidden')">Get started free</button>
-        <button class="btn btn--ghost" onclick="Plans.show()">See all plans</button>
-      </div>
+        <button class="btn btn--primary" onclick="Auth.showTab('signup');document.getElementById('authOverlay').classList.remove('hidden')">Get started free</button>      </div>
     </div>
   </section>
 
 </main>
 
 <footer class="site-footer">
-  <p>Built by Matimba Khumalo · Verify exam dates and admission rules with your school and universities. · <a style="color:var(--amber)" data-nav="about">About</a></p>
+  <p>Built by Matimba Khumalo · 100% free for every learner · Verify exam dates and admission rules with your school and universities. · <a style="color:var(--amber)" data-nav="about">About</a></p>
 </footer>
 
 <!-- ============================================================
@@ -927,8 +801,9 @@ const Auth = (() => {
   /* ---- public getters ---- */
   function token()   { return _token; }
   function user()    { return _user; }
-  function isPlus()  { return _user && (_user.tier === 'plus' || _user.tier === 'pro'); }
-  function isPro()   { return _user && _user.tier === 'pro'; }
+  // Everything is free, so every learner counts as fully unlocked.
+  function isPlus()  { return true; }
+  function isPro()   { return true; }
   function tier()    { return _user ? (_user.tier || 'free') : 'free'; }
   function verified(){ return _user && _user.email_verified; }
 
@@ -948,7 +823,7 @@ const Auth = (() => {
       $id('tabLogin').classList.remove('active');
       $id('tabSignup').classList.add('active');
       $id('authTitle').textContent = 'Create your account';
-      $id('authSub').textContent = 'Free to start — upgrade when you\'re ready.';
+      $id('authSub').textContent = '100% free — all subjects, quizzes and AI Tutor chats, unlimited.';
     }
   }
 
@@ -1045,9 +920,6 @@ const Auth = (() => {
     updateTopbar();
     updateVerifyBanner();
 
-    if (isNew) {
-      Plans.show();
-    }
     // re-init everything that depends on auth
     if (window.QuizRoom) QuizRoom.renderSubjectPicker && QuizRoom.renderSubjectPicker();
   }
@@ -1066,22 +938,10 @@ const Auth = (() => {
     if (!_user) return;
     const wrap   = $id('topbarUser');
     const avatar = $id('topbarAvatar');
-    const tierEl = $id('topbarTier');
-    const upgBtn = $id('navUpgrade');
 
     wrap.style.display = 'flex';
     avatar.textContent = (_user.name || 'U')[0].toUpperCase();
     avatar.title = _user.name || _user.email;
-
-    const t = tier();
-    tierEl.textContent = t === 'free' ? 'Free' : t === 'plus' ? 'Plus' : 'Pro';
-    tierEl.className = 'topbar-tier ' + (t !== 'free' ? t : '');
-
-    if (t === 'free') {
-      upgBtn.classList.remove('hidden');
-    } else {
-      upgBtn.classList.add('hidden');
-    }
   }
 
   function updateVerifyBanner() {
@@ -1094,9 +954,7 @@ const Auth = (() => {
   }
 
   /* ---- upgrade prompt (used by quiz.js) ---- */
-  function showUpgrade(message, cta) {
-    Plans.show(message);
-  }
+  function showUpgrade() { /* nothing to upgrade: everything is free */ }
 
   /* ---- init: if we already have a token, skip auth overlay ---- */
   function init() {
@@ -1120,120 +978,9 @@ const Auth = (() => {
      PLANS MODULE
      ============================================================ -->
 <script>
-const Plans = (() => {
-  const BACKEND = ''; // auto-detect: relative when served by Express
-
-  const PLANS = [
-    {
-      id: 'free',
-      name: 'Free',
-      price: 0,
-      features: [
-        'Mathematics quizzes (Paper 1 & 2)',
-        'Unlimited AI Tutor chats',
-        'Varsity Hub & APS calculator',
-        'Exam countdown clock',
-      ],
-      cta: 'Continue with Free',
-      popular: false,
-    },
-    {
-      id: 'plus',
-      name: 'MatricLab Plus',
-      price: 30,
-      features: [
-        'All 4 subjects & past papers',
-        'Subject-by-subject quiz history',
-        'Everything in Free',
-      ],
-      cta: 'Get Plus — R30/mo',
-      popular: true,
-    },
-    {
-      id: 'pro',
-      name: 'MatricLab Pro',
-      price: 50,
-      features: [
-        'Everything in Plus',
-        'Full progress analytics',
-        'Downloadable study notes',
-        'Priority support',
-      ],
-      cta: 'Get Pro — R50/mo',
-      popular: false,
-    },
-  ];
-
-  function show(contextMessage) {
-    const overlay = document.getElementById('planOverlay');
-    const grid    = document.getElementById('planGrid');
-
-    grid.innerHTML = PLANS.map(p => `
-      <div class="plan-tile${p.popular ? ' popular' : ''}" onclick="Plans.select('${p.id}')">
-        ${p.popular ? '<div class="plan-tile__badge">Most popular</div>' : ''}
-        <div class="plan-tile__name">${p.name}</div>
-        <div class="plan-tile__price">
-          ${p.price === 0 ? 'Free' : `R${p.price}`}
-          ${p.price > 0 ? '<span>/month</span>' : ''}
-        </div>
-        <ul class="plan-tile__features">
-          ${p.features.map(f => `<li>${f}</li>`).join('')}
-        </ul>
-        <button class="btn ${p.popular ? 'btn--primary' : 'btn--ghost'} plan-tile__cta"
-                onclick="event.stopPropagation();Plans.select('${p.id}')">
-          ${p.cta}
-        </button>
-      </div>
-    `).join('');
-
-    overlay.classList.remove('hidden');
-  }
-
-  async function select(planId) {
-    const overlay = document.getElementById('planOverlay');
-
-    if (planId === 'free') {
-      overlay.classList.add('hidden');
-      return;
-    }
-
-    // Paid plan → initiate PayFast subscription
-    const token = Auth.token();
-    if (!token) { overlay.classList.add('hidden'); return; }
-
-    try {
-      const res = await fetch(`${BACKEND}/api/subscribe`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ tier: planId }),
-      });
-      const data = await res.json();
-      if (!res.ok) { showToast(data.error || 'Could not start subscription.'); return; }
-
-      // Build and submit PayFast form
-      const form = document.getElementById('payfastForm');
-      form.action = data.action;
-      form.innerHTML = '';
-      Object.entries(data.fields).forEach(([k, v]) => {
-        const inp = document.createElement('input');
-        inp.type = 'hidden';
-        inp.name = k;
-        inp.value = v;
-        form.appendChild(inp);
-      });
-      overlay.classList.add('hidden');
-      form.submit();   // redirects to PayFast in the same tab (no popup blocking)
-
-    } catch {
-      showToast('Cannot reach the server. Start the backend first.');
-    }
-  }
-
-  return { show, select };
-})();
+// Pricing was removed (everything is free). Harmless stub so older scripts
+// like quiz.js that still call Plans.show() don't throw.
+const Plans = { show() {}, select() {} };
 
 /* Global toast helper */
 function showToast(msg, duration = 4000) {
@@ -1420,7 +1167,7 @@ const Tutor = (() => {
       if (msg) send(msg);
     });
 
-    appendMsg('assistant', "Hi! I'm your AI Tutor powered by Ollama. Choose a subject on the left and ask me anything — I'll explain it step by step. 🎓");
+    appendMsg('assistant', "Hi! I'm your AI Tutor. Chats are free and unlimited, so choose a subject on the left and ask me anything. I'll explain it step by step. 🎓");
   }
 
   return { init };
