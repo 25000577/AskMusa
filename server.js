@@ -7,11 +7,11 @@ import path          from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database      from 'better-sqlite3';
 import { readFormBody } from './http-utils.js';
-import { buildPaymentFields, verifyNotifySignature } from './payfast/payfast.js';
+import { buildPaymentFields, verifyNotifySignature } from './payfast.js'; // Fixed path here
 import { FREE_TUTOR_DAILY_LIMIT, FREE_UNLOCKED_SUBJECTS, TIERS, tierAtLeast } from './config.js';
 
 /* ------------------------------------------------------------------ */
-/*  Config                                                              */
+/*  Config                                                            */
 /* ------------------------------------------------------------------ */
 const __dirname    = path.dirname(fileURLToPath(import.meta.url));
 const PORT         = process.env.PORT || 3001;
@@ -22,7 +22,7 @@ const JWT_SECRET   = process.env.JWT_SECRET   || 'xcelerate-dev-secret-change-in
 const TOKEN_TTL    = 60 * 60 * 24 * 30; // 30 days
 
 /* ------------------------------------------------------------------ */
-/*  Database  (create data/ dir FIRST so SQLite doesn't throw)         */
+/*  Database  (create data/ dir FIRST so SQLite doesn't throw)          */
 /* ------------------------------------------------------------------ */
 mkdirSync(path.join(__dirname, 'data'), { recursive: true });
 
@@ -30,65 +30,65 @@ const db = new Database(path.join(__dirname, 'data', 'app.db'));
 db.pragma('journal_mode = WAL');
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    name                TEXT NOT NULL,
-    email               TEXT NOT NULL UNIQUE,
-    password_hash       TEXT NOT NULL,
-    password_salt       TEXT NOT NULL,
-    grade               TEXT DEFAULT 'Grade 12',
-    tier                TEXT DEFAULT 'free',
-    subscription_status TEXT DEFAULT 'none',
-    payfast_token       TEXT,
-    is_admin            INTEGER DEFAULT 0,
-    email_verified      INTEGER DEFAULT 0,
-    verify_token        TEXT,
-    verify_expires      TEXT,
-    created_at          TEXT NOT NULL,
-    last_active_at      TEXT NOT NULL
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    name                  TEXT NOT NULL,
+    email                 TEXT NOT NULL UNIQUE,
+    password_hash         TEXT NOT NULL,
+    password_salt         TEXT NOT NULL,
+    grade                 TEXT DEFAULT 'Grade 12',
+    tier                  TEXT DEFAULT 'free',
+    subscription_status   TEXT DEFAULT 'none',
+    payfast_token         TEXT,
+    is_admin              INTEGER DEFAULT 0,
+    email_verified        INTEGER DEFAULT 0,
+    verify_token          TEXT,
+    verify_expires        TEXT,
+    created_at            TEXT NOT NULL,
+    last_active_at        TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS quiz_attempts (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id    INTEGER NOT NULL,
-    subject    TEXT NOT NULL,
-    paper      TEXT NOT NULL,
-    score      INTEGER NOT NULL,
-    total      INTEGER NOT NULL,
-    created_at TEXT NOT NULL
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL,
+    subject      TEXT NOT NULL,
+    paper        TEXT NOT NULL,
+    score        INTEGER NOT NULL,
+    total        INTEGER NOT NULL,
+    created_at   TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS tutor_messages (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id    INTEGER NOT NULL,
-    subject    TEXT,
-    created_at TEXT NOT NULL
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL,
+    subject      TEXT,
+    created_at   TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS subscriptions (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id       INTEGER NOT NULL,
-    tier          TEXT NOT NULL,
-    m_payment_id  TEXT NOT NULL,
-    amount_gross  REAL,
-    status        TEXT DEFAULT 'pending',
-    pf_payment_id TEXT,
-    raw_payload   TEXT,
-    created_at    TEXT NOT NULL
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER NOT NULL,
+    tier            TEXT NOT NULL,
+    m_payment_id    TEXT NOT NULL,
+    amount_gross    REAL,
+    status          TEXT DEFAULT 'pending',
+    pf_payment_id   TEXT,
+    raw_payload     TEXT,
+    created_at      TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS activity_log (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id    INTEGER NOT NULL,
-    event_type TEXT NOT NULL,
-    meta       TEXT,
-    created_at TEXT NOT NULL
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL,
+    event_type   TEXT NOT NULL,
+    meta         TEXT,
+    created_at   TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS session_pings (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id    INTEGER NOT NULL,
-    view       TEXT,
-    created_at TEXT NOT NULL
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id      INTEGER NOT NULL,
+    view         TEXT,
+    created_at   TEXT NOT NULL
   );
 `);
 
 /* ------------------------------------------------------------------ */
-/*  Crypto helpers                                                      */
+/*  Crypto helpers                                                    */
 /* ------------------------------------------------------------------ */
 function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -133,7 +133,7 @@ function verifyToken(token) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  HTTP helpers                                                        */
+/*  HTTP helpers                                                      */
 /* ------------------------------------------------------------------ */
 function sendJSON(res, status, payload) {
   res.status(status).json(payload);
@@ -172,7 +172,7 @@ function logActivity(userId, eventType, meta) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Seed admin account (on every start if env vars are set)            */
+/*  Seed admin account (on every start if env vars are set)           */
 /* ------------------------------------------------------------------ */
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_PASS  = process.env.ADMIN_PASSWORD;
@@ -190,11 +190,11 @@ if (ADMIN_EMAIL && ADMIN_PASS) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Email verification                                                  */
+/*  Email verification                                                */
 /* ------------------------------------------------------------------ */
 async function sendVerificationEmail(user, token) {
   const link = `${APP_URL}/api/auth/verify?token=${token}`;
-  console.log('\n📧 Verify link for', user.email, '\n  ', link, '\n');
+  console.log('\n📧 Verify link for', user.email, '\n   ', link, '\n');
 
   if (process.env.SMTP_HOST) {
     try {
@@ -206,7 +206,7 @@ async function sendVerificationEmail(user, token) {
         auth:   { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
       });
       await transport.sendMail({
-        from:    `"Xcelerate MathsAcademy" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
+        from:   `"Xcelerate MathsAcademy" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
         to:      user.email,
         subject: 'Verify your Xcelerate MathsAcademy account',
         html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px;">
@@ -225,7 +225,7 @@ async function sendVerificationEmail(user, token) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Express                                                             */
+/*  Express                                                           */
 /* ------------------------------------------------------------------ */
 const app = express();
 app.use(cors());
@@ -268,7 +268,7 @@ app.post('/api/auth/signup', (req, res) => {
 
   const token = signToken({ sub: user.id });
   return sendJSON(res, 201, { token, user: publicUser(user) });
-}); // app.use('/api/payfast', payfast);
+});
 
 app.post('/api/auth/login', (req, res) => {
   const { email, password } = req.body;
@@ -449,7 +449,7 @@ app.post('/api/subscribe', (req, res) => {
   } catch (err) {
     return sendJSON(res, 500, { error: err.message });
   }
-}); // import payfast from './payfast/payfast.js';
+});
 
 /* ---- PayFast ITN ---- */
 app.post('/api/payfast/notify', async (req, res) => {
@@ -503,7 +503,7 @@ app.get('/api/admin/stats', (req, res) => {
   const byTier   = db.prepare('SELECT tier, COUNT(*) c FROM users WHERE is_admin = 0 GROUP BY tier').all();
   const tierCounts = { free: 0, plus: 0, pro: 0 };
   byTier.forEach(r => { tierCounts[r.tier] = r.c; });
-  const mrr     = tierCounts.plus * TIERS.plus.price + tierCounts.pro * TIERS.pro.price;
+  const mrr      = tierCounts.plus * TIERS.plus.price + tierCounts.pro * TIERS.pro.price;
   const dayAgo  = new Date(Date.now() - 86400000).toISOString();
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
   return sendJSON(res, 200, {
@@ -564,16 +564,16 @@ app.get('*', (req, res) => {
 });
 
 /* ------------------------------------------------------------------ */
-/*  Start                                                               */
+/*  Start                                                             */
 /* ------------------------------------------------------------------ */
 app.listen(PORT, () => {
   console.log(`\n Xcelerate MathsAcademy`);
-  console.log(`   Open → http://localhost:3001`);
-  console.log(`   Admin → http://localhost:3001/admin.html`);
-  console.log(`   Ollama → http://localhost:11434/api/generate (model: llma3)`);
-  console.log(`   PayFast → ${process.env.PAYFAST_SANDBOX !== 'false' ? 'SANDBOX' : 'LIVE'}`);
+  console.log(`    Open → http://localhost:3001`);
+  console.log(`    Admin → http://localhost:3001/admin.html`);
+  console.log(`    Ollama → http://localhost:11434/api/generate (model: llama3)`);
+  console.log(`    PayFast → ${process.env.PAYFAST_SANDBOX !== 'false' ? 'SANDBOX' : 'LIVE'}`);
   if (!process.env.SMTP_HOST) {
-    console.log(`   Email → console only (add SMTP_HOST to .env for real emails)`);
+    console.log(`    Email → console only (add SMTP_HOST to .env for real emails)`);
   }
   console.log('');
 });
