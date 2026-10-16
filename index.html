@@ -11,6 +11,9 @@
 
 <style>
 
+/* global helper so .hidden works everywhere (nav upgrade button, overlays, etc.) */
+.hidden { display: none !important; }
+
 .auth-overlay {
   position: fixed;
   inset: 0;
@@ -585,8 +588,8 @@
   </div>
 </div>
 
-<!-- Hidden PayFast auto-submit form -->
-<form id="payfastForm" method="POST" target="_blank">
+<!-- Hidden PayFast auto-submit form (same-tab redirect so browsers don't block it) -->
+<form id="payfastForm" method="POST">
   <!-- fields injected by JS -->
 </form>
 
@@ -1223,7 +1226,7 @@ const Plans = (() => {
         form.appendChild(inp);
       });
       overlay.classList.add('hidden');
-      form.submit();   // opens PayFast in new tab (form has target="_blank")
+      form.submit();   // redirects to PayFast in the same tab (no popup blocking)
 
     } catch {
       showToast('Cannot reach the server. Start the backend first.');
@@ -1460,31 +1463,16 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 </script>
-<!-- Supabase Client Library -->
+
+<!-- Supabase client -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script>
-        // Replace these with your actual Supabase project credentials
-        const SUPABASE_URL = sb_publishable_Ekb0wv2KwSY6aQgO_SHdjw_DChgmpjx;
-        const SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVscmlnc3VwcGl1Y3RjeGpoZWhyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE2NTAzMjksImV4cCI6MjEwNzIyNjMyOX0.y8KGvTB6mc__Psoa-f50qzcDgCl1JZSOQbB71ThqgUk;
+<script>
+  // Values must be quoted strings. Confirm the URL in Dashboard → Project Settings → API.
+  const SUPABASE_URL = 'https://ulrigsuppiuctcxjhehr.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_Ekb0wv2KwSY6aQgO_SHdjw_DChgmpjx';
 
-        // Initialize the client using the global 'supabase' object
-        const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+</script>
 
-        // Test the connection by fetching data from a table
-        async function testConnection() {
-            const { data, error } = await db.from('your_table_name').select('*');
-            
-            if (error) {
-                console.error('Error connecting to database:', error);
-            } else {
-                console.log('Successfully connected! Here is your data:', data);
-            }
-        }
-
-        // Run the function when the page loads
-        testConnection();
-    </script>
-<!-- Your custom JavaScript file -->
-<script src="app.js"></script>
 </body>
 </html>
