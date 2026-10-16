@@ -457,4 +457,52 @@ app.get('/api/admin/subscriptions', (req, res) => {
 
 // Admin upload custom quiz question
 app.post('/api/admin/quizzes', (req, res) => {
-  const admin = require
+  const admin = requireAdmin(req, res);
+  if (!admin) return;
+
+  const { subject, paper, question, options, answer, explanation } = req.body;
+  if (!subject || !paper || !question || !options || !answer)
+    return sendJSON(res, 400, { error: 'subject, paper, question, options, and answer are required.' });
+
+  db.prepare(`
+    INSERT INTO custom_quizzes (subject, paper, question, options, answer, explanation, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    subject, 
+    paper, 
+    question, 
+    Array.isArray(options) ? JSON.stringify(options) : options, 
+    answer, 
+    explanation || '', 
+    new Date().toISOString()
+  );
+
+  logActivity(admin.id, 'upload_quiz_question', { subject, paper });
+  return sendJSON(res, 201, { ok: true, message: 'Question uploaded successfully!' });
+});
+
+/* ---- Static frontend ---- */
+const FRONTEND = path.join(__dirname, '..');
+app.use(express.static(FRONTEND));
+
+// Explicit route to serve admin.html properly
+app.get('/admin.html', (_req, res) => {
+  res.sendFile(path.join(FRONTEND, 'admin.html'));
+});
+
+app.get('*', (req, res) => {
+  if (!req.path.startsWith('/api')) {
+    res.sendFile(path.join(FRONTEND, 'index.html'));
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/*  Start Server                                                      */
+/* ------------------------------------------------------------------ */
+app.listen(PORT, () => {
+  console.log(`\n Xcelerate MathsAcademy (Free Edition)`);
+  console.log(`    Open → http://localhost:${PORT}`);
+  console.log(`    AI Engine → Google Gemini (gemini-2.5-flash)`);
+  console.log(`    Status → 100% Free & Unlimited`);
+  console.log('');
+});
