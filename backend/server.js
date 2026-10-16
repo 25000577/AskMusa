@@ -73,6 +73,15 @@ db.exec(`
     view          TEXT,
     created_at    TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS subscriptions (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER NOT NULL,
+    tier          TEXT NOT NULL,
+    status        TEXT NOT NULL,
+    amount_gross  REAL,
+    pf_payment_id TEXT,
+    created_at    TEXT NOT NULL
+  );
 `);
 
 /* ------------------------------------------------------------------ */
@@ -174,6 +183,9 @@ if (ADMIN_EMAIL && ADMIN_PASS) {
        VALUES (?,?,?,?,1,1,?,?)`
     ).run('Admin', ADMIN_EMAIL, hash, salt, now, now);
     console.log('✓ Admin account created:', ADMIN_EMAIL);
+  } else {
+    // Ensure existing user configured via env is promoted to admin if credentials match or config updates
+    db.prepare('UPDATE users SET is_admin = 1 WHERE email = ?').run(ADMIN_EMAIL);
   }
 }
 
@@ -359,12 +371,71 @@ app.post('/api/activity/ping', (req, res) => {
   return sendJSON(res, 200, { ok: true });
 });
 
-/* ---- Admin ---- */
+/* ---- Admin Dashboard API Endpoints ---- */
 app.get('/api/admin/stats', (req, res) => {
   const admin = requireAdmin(req, res);
   if (!admin) return;
+
   const total = db.prepare('SELECT COUNT(*) c FROM users WHERE is_admin = 0').get().c;
-  return sendJSON(res, 200, { totalLearners: total, tierCounts: { free: total }, estimatedMRR: 0 });
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const weekAgoStr = new Date(now.getTime() - 7 * 86400000).toISOString();
+
+  const activeToday = db.prepare("SELECT COUNT(DISTINCT user_id) c FROM activity_log WHERE created_at >= ?").get(todayStr)?.c || 0;
+  const activeWeek = db.prepare("SELECT COUNT(DISTINCT user_id) c FROM activity_log WHERE created_at >= ?").get(weekAgoStr)?.c || 0;
+
+  return sendJSON(res, 200, {
+    totalLearners: total,
+    tierCounts: { free: total, plus: 0, pro: 0 },
+    estimatedMRR: 0,
+    activeToday,
+    activeWeek
+  });
+});
+
+app.get('/api/admin/feed', (req, res) => {
+  const admin = requireAdmin(req, res);
+  if (!admin) return;
+
+  const feed = db.prepare(`
+    SELECT a.event_type, a.meta, a.created_at, u.name, u.email
+    FROM activity_log a
+    JOIN users u ON a.user_id = u.id
+    ORDER BY a.id DESC
+    LIMIT 100
+  `).all();
+
+  return sendJSON(res, 200, { feed });
+});
+
+app.get('/api/admin/learners', (req, res) => {
+  const admin = requireAdmin(req, res);
+  if (!admin) return;
+
+  const learners = db.prepare(`
+    SELECT u.id, u.name, u.email, u.grade, u.tier, u.subscription_status, u.email_verified, u.created_at, u.last_active_at,
+           (SELECT COUNT(*) FROM quiz_attempts q WHERE q.user_id = u.id) as quizCount,
+           (SELECT COALESCE(ROUND(AVG((score*100.0)/total)), 0) FROM quiz_attempts q WHERE q.user_id = u.id) as avgScore
+    FROM users u
+    WHERE u.is_admin = 0
+    ORDER BY u.id DESC
+  `).all();
+
+  return sendJSON(res, 200, { learners });
+});
+
+app.get('/api/admin/subscriptions', (req, res) => {
+  const admin = requireAdmin(req, res);
+  if (!admin) return;
+
+  const subscriptions = db.prepare(`
+    SELECT s.*, u.name, u.email
+    FROM subscriptions s
+    JOIN users u ON s.user_id = u.id
+    ORDER BY s.id DESC
+  `).all();
+
+  return sendJSON(res, 200, { subscriptions });
 });
 
 /* ---- Static frontend ---- */
